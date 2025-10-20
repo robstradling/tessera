@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 	ctx := context.Background()
 
-	db, err := pgxpool.New("postgresql", *postgresqlURI)
+	db, err := pgxpool.New(ctx, *postgresqlURI)
 	if err != nil {
 		if *isPostgreSQLTestOptional {
 			klog.Warning("PostgreSQL not available, skipping all PostgreSQL storage tests")
@@ -108,7 +108,7 @@ func initDatabaseSchema(ctx context.Context) {
 		klog.Fatalf("Failed to read schema.sql: %v", err)
 	}
 
-	db, err := pgxpool.New("postgresql", *postgresqlURI+"?multiStatements=true")
+	db, err := pgxpool.New(ctx, *postgresqlURI)
 	if err != nil {
 		klog.Fatalf("Failed to connect to DB: %v", err)
 	}

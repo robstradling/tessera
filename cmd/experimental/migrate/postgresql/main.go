@@ -20,6 +20,7 @@ import (
 	"context"
 	"encoding/base64"
 	"flag"
+	"fmt"
 	"net/url"
 	"os"
 	"strconv"
@@ -37,7 +38,6 @@ var (
 	postgreSQLURI     = flag.String("postgresql_uri", "postgresql:///tessera?host=localhost&user=test", "Connection string for a PostgreSQL database")
 	dbConnMaxLifetime = flag.Duration("db_conn_max_lifetime", 3*time.Minute, "")
 	dbMaxOpenConns    = flag.Int("db_max_open_conns", 64, "")
-	dbMaxIdleConns    = flag.Int("db_max_idle_conns", 64, "")
 	initSchemaPath    = flag.String("init_schema_path", "", "Location of the schema file if database initialization is needed")
 
 	sourceURL  = flag.String("source_url", "", "Base URL for the source log.")
@@ -95,7 +95,12 @@ func initDatabaseSchema(ctx context.Context) {
 	if *initSchemaPath != "" {
 		klog.Infof("Initializing database schema")
 
-		db, err := pgxpool.New(ctx, *postgreSQLURI)
+		cfg, err := pgxpool.ParseConfig(*postgreSQLURI + "&pool_max_conns=" + fmt.Sprintf("%d", *dbMaxOpenConns) + "&pool_max_conn_lifetime=" + dbConnMaxLifetime.String())
+		if err != nil {
+			klog.Exitf("Failed to parse PostgreSQL config: %v", err)
+		}
+
+		db, err := pgxpool.NewWithConfig(ctx, cfg)
 		if err != nil {
 			klog.Exitf("Failed to connect to DB: %v", err)
 		}
@@ -114,13 +119,15 @@ func initDatabaseSchema(ctx context.Context) {
 }
 
 func createDatabaseOrDie(ctx context.Context) *pgxpool.Pool {
-	db, err := pgxpool.New(ctx, *postgreSQLURI)
+	cfg, err := pgxpool.ParseConfig(*postgreSQLURI + "&pool_max_conns=" + fmt.Sprintf("%d", *dbMaxOpenConns) + "&pool_max_conn_lifetime=" + dbConnMaxLifetime.String())
+	if err != nil {
+		klog.Exitf("Failed to parse PostgreSQL config: %v", err)
+	}
+
+	db, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		klog.Exitf("Failed to connect to DB: %v", err)
 	}
-	db.SetConnMaxLifetime(*dbConnMaxLifetime)
-	db.SetMaxOpenConns(*dbMaxOpenConns)
-	db.SetMaxIdleConns(*dbMaxIdleConns)
 
 	initDatabaseSchema(ctx)
 	return db

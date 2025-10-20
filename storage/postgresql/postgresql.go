@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package mysql contains a MySQL-based storage implementation for Tessera.
-package mysql
+// Package postgresql contains a PostgreSQL-based storage implementation for Tessera.
+package postgresql
 
 import (
 	"bytes"
@@ -28,7 +28,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/postgresql"
 	"github.com/transparency-dev/merkle/rfc6962"
 	"github.com/transparency-dev/tessera"
 	"github.com/transparency-dev/tessera/api"
@@ -60,12 +60,12 @@ const (
 	minCheckpointInterval = time.Second
 )
 
-// Storage is a MySQL-based storage implementation for Tessera.
+// Storage is a PostgreSQL-based storage implementation for Tessera.
 type Storage struct {
 	db *sql.DB
 }
 
-// New creates a new instance of the MySQL-based Storage.
+// New creates a new instance of the PostgreSQL-based Storage.
 func New(ctx context.Context, db *sql.DB) (*Storage, error) {
 	s := &Storage{
 		db: db,
@@ -619,7 +619,7 @@ func integrate(ctx context.Context, tx *sql.Tx, fromSeq uint64, lh [][]byte, wri
 	return newSize, newRoot, nil
 }
 
-// MigrationWriter creates a new MySQL storage for the MigrationTarget lifecycle mode.
+// MigrationWriter creates a new PostgreSQL storage for the MigrationTarget lifecycle mode.
 func (s *Storage) MigrationWriter(ctx context.Context, opts *tessera.MigrationOptions) (migrate.MigrationWriter, tessera.LogReader, error) {
 	if err := s.maybeInitTree(ctx); err != nil {
 		return nil, nil, fmt.Errorf("maybeInitTree: %v", err)

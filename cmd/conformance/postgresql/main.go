@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// mysql is a simple personality allowing to run conformance/compliance/performance tests and showing how to use the Tessera MySQL storage implmentation.
+// postgresql is a simple personality allowing to run conformance/compliance/performance tests and showing how to use the Tessera PostgreSQL storage implmentation.
 package main
 
 import (
@@ -29,7 +29,7 @@ import (
 
 	"github.com/transparency-dev/tessera"
 	"github.com/transparency-dev/tessera/api/layout"
-	"github.com/transparency-dev/tessera/storage/mysql"
+	"github.com/transparency-dev/tessera/storage/postgresql"
 	"golang.org/x/mod/sumdb/note"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -37,7 +37,7 @@ import (
 )
 
 var (
-	mysqlURI                  = flag.String("mysql_uri", "user:password@tcp(db:3306)/tessera", "Connection string for a MySQL database")
+	postgresqlURI                  = flag.String("postgresql_uri", "user:password@tcp(db:3306)/tessera", "Connection string for a PostgreSQL database")
 	dbConnMaxLifetime         = flag.Duration("db_conn_max_lifetime", 3*time.Minute, "")
 	dbMaxOpenConns            = flag.Int("db_max_open_conns", 64, "")
 	dbMaxIdleConns            = flag.Int("db_max_idle_conns", 64, "")
@@ -63,10 +63,10 @@ func main() {
 	db := createDatabaseOrDie(ctx)
 	noteSigner, additionalSigners := createSignersOrDie()
 
-	// Initialise the Tessera MySQL storage
-	driver, err := mysql.New(ctx, db)
+	// Initialise the Tessera PostgreSQL storage
+	driver, err := postgresql.New(ctx, db)
 	if err != nil {
-		klog.Exitf("Failed to create new MySQL storage: %v", err)
+		klog.Exitf("Failed to create new PostgreSQL storage: %v", err)
 	}
 
 	appender, shutdown, reader, err := tessera.NewAppender(ctx, driver, tessera.NewAppendOptions().
@@ -120,7 +120,7 @@ func main() {
 }
 
 func createDatabaseOrDie(ctx context.Context) *sql.DB {
-	db, err := sql.Open("mysql", *mysqlURI)
+	db, err := sql.Open("postgresql", *postgresqlURI)
 	if err != nil {
 		klog.Exitf("Failed to connect to DB: %v", err)
 	}
@@ -154,9 +154,9 @@ func createSignerOrDie(s string) note.Signer {
 }
 
 // configureTilesReadAPI adds the API methods from https://c2sp.org/tlog-tiles to the mux,
-// routing the requests to the mysql storage.
+// routing the requests to the postgresql storage.
 // This method could be moved into the storage API as it's likely this will be
-// the same for any implementation of a personality based on MySQL.
+// the same for any implementation of a personality based on PostgreSQL.
 func configureTilesReadAPI(mux *http.ServeMux, reader tessera.LogReader) {
 	mux.HandleFunc("GET /checkpoint", func(w http.ResponseWriter, r *http.Request) {
 		checkpoint, err := reader.ReadCheckpoint(r.Context())
@@ -242,7 +242,7 @@ func initDatabaseSchema(ctx context.Context) {
 	if *initSchemaPath != "" {
 		klog.Infof("Initializing database schema")
 
-		db, err := sql.Open("mysql", *mysqlURI+"?multiStatements=true")
+		db, err := sql.Open("postgresql", *postgresqlURI+"?multiStatements=true")
 		if err != nil {
 			klog.Exitf("Failed to connect to DB: %v", err)
 		}

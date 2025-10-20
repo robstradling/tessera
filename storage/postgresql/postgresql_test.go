@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package mysql_test contains the tests for a MySQL-based storage implementation for Tessera.
-// It requires a MySQL database to successfully run the tests. Otherwise, the tests in this file will be skipped.
+// Package postgresql_test contains the tests for a PostgreSQL-based storage implementation for Tessera.
+// It requires a PostgreSQL database to successfully run the tests. Otherwise, the tests in this file will be skipped.
 //
-// Sample command to start a local MySQL database using Docker:
-// $ docker run --name test-mysql -p 3306:3306 -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=test_tessera -d mysql
-package mysql
+// Sample command to start a local PostgreSQL database using Docker:
+// $ docker run --name test-postgresql -p 3306:3306 -e POSTGRESQL_ROOT_PASSWORD=root -e POSTGRESQL_DATABASE=test_tessera -d postgresql
+package postgresql
 
 import (
 	"bytes"
@@ -42,8 +42,8 @@ import (
 )
 
 var (
-	mysqlURI            = flag.String("mysql_uri", "root:root@tcp(localhost:3306)/test_tessera", "Connection string for a MySQL database")
-	isMySQLTestOptional = flag.Bool("is_mysql_test_optional", true, "Boolean value to control whether the MySQL test is optional")
+	postgresqlURI            = flag.String("postgresql_uri", "root:root@tcp(localhost:3306)/test_tessera", "Connection string for a PostgreSQL database")
+	isPostgreSQLTestOptional = flag.Bool("is_postgresql_test_optional", true, "Boolean value to control whether the PostgreSQL test is optional")
 
 	testDB     *sql.DB
 	noteSigner note.Signer
@@ -54,37 +54,37 @@ const (
 	testPublicKey  = "transparency.dev/tessera/example+ae330e15+ASf4/L1zE859VqlfQgGzKy34l91Gl8W6wfwp+vKP62DW"
 )
 
-// TestMain checks whether the test MySQL database is available and starts the tests including database schema initialization.
-// If is_mysql_test_optional is set to true and MySQL database cannot be opened or pinged, the test will fail immediately.
+// TestMain checks whether the test PostgreSQL database is available and starts the tests including database schema initialization.
+// If is_postgresql_test_optional is set to true and PostgreSQL database cannot be opened or pinged, the test will fail immediately.
 // Otherwise, the test will be skipped if the test is optional and the database is not available.
 func TestMain(m *testing.M) {
 	klog.InitFlags(nil)
 	flag.Parse()
 	ctx := context.Background()
 
-	db, err := sql.Open("mysql", *mysqlURI)
+	db, err := sql.Open("postgresql", *postgresqlURI)
 	if err != nil {
-		if *isMySQLTestOptional {
-			klog.Warning("MySQL not available, skipping all MySQL storage tests")
+		if *isPostgreSQLTestOptional {
+			klog.Warning("PostgreSQL not available, skipping all PostgreSQL storage tests")
 			return
 		}
-		klog.Fatalf("Failed to open MySQL test db: %v", err)
+		klog.Fatalf("Failed to open PostgreSQL test db: %v", err)
 	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			klog.Warningf("Failed to close MySQL database: %v", err)
+			klog.Warningf("Failed to close PostgreSQL database: %v", err)
 		}
 	}()
 	if err := db.PingContext(ctx); err != nil {
-		if *isMySQLTestOptional {
-			klog.Warning("MySQL not available, skipping all MySQL storage tests")
+		if *isPostgreSQLTestOptional {
+			klog.Warning("PostgreSQL not available, skipping all PostgreSQL storage tests")
 			return
 		}
-		klog.Fatalf("Failed to ping MySQL test db: %v", err)
+		klog.Fatalf("Failed to ping PostgreSQL test db: %v", err)
 	}
 	testDB = db
 
-	klog.Info("Successfully connected to MySQL test database")
+	klog.Info("Successfully connected to PostgreSQL test database")
 
 	initDatabaseSchema(ctx)
 
@@ -99,7 +99,7 @@ func TestMain(m *testing.M) {
 // initDatabaseSchema drops the tables and then imports the schema.
 // A separate database connection is required since the schema file contains multiple statements.
 // `multiStatements=true` in the data source name allows multiple statements in one query.
-// This is not being used in the actual MySQL storage implementation.
+// This is not being used in the actual PostgreSQL storage implementation.
 func initDatabaseSchema(ctx context.Context) {
 	dropTablesSQL := "DROP TABLE IF EXISTS `Checkpoint`, `Subtree`, `TiledLeaves`, `TreeState`"
 
@@ -108,7 +108,7 @@ func initDatabaseSchema(ctx context.Context) {
 		klog.Fatalf("Failed to read schema.sql: %v", err)
 	}
 
-	db, err := sql.Open("mysql", *mysqlURI+"?multiStatements=true")
+	db, err := sql.Open("postgresql", *postgresqlURI+"?multiStatements=true")
 	if err != nil {
 		klog.Fatalf("Failed to connect to DB: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestAppend(t *testing.T) {
 
 func TestGetTile(t *testing.T) {
 	ctx := context.Background()
-	addFn, r, _ := newTestMySQLStorage(t, ctx)
+	addFn, r, _ := newTestPostgreSQLStorage(t, ctx)
 
 	awaiter := tessera.NewPublicationAwaiter(ctx, r.ReadCheckpoint, 10*time.Millisecond)
 
@@ -258,7 +258,7 @@ func TestGetTile(t *testing.T) {
 
 func TestReadMissingTile(t *testing.T) {
 	ctx := context.Background()
-	_, r, _ := newTestMySQLStorage(t, ctx)
+	_, r, _ := newTestPostgreSQLStorage(t, ctx)
 
 	for _, test := range []struct {
 		name         string
@@ -292,7 +292,7 @@ func TestReadMissingTile(t *testing.T) {
 
 func TestReadMissingEntryBundle(t *testing.T) {
 	ctx := context.Background()
-	_, r, _ := newTestMySQLStorage(t, ctx)
+	_, r, _ := newTestPostgreSQLStorage(t, ctx)
 
 	for _, test := range []struct {
 		name  string
@@ -326,7 +326,7 @@ func TestReadMissingEntryBundle(t *testing.T) {
 func TestParallelAdd(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	addFn, _, _ := newTestMySQLStorage(t, ctx)
+	addFn, _, _ := newTestPostgreSQLStorage(t, ctx)
 
 	for _, test := range []struct {
 		name  string
@@ -362,7 +362,7 @@ func TestParallelAdd(t *testing.T) {
 
 func TestTileRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	addFn, r, _ := newTestMySQLStorage(t, ctx)
+	addFn, r, _ := newTestPostgreSQLStorage(t, ctx)
 
 	for _, test := range []struct {
 		name  string
@@ -413,7 +413,7 @@ func TestTileRoundTrip(t *testing.T) {
 
 func TestEntryBundleRoundTrip(t *testing.T) {
 	ctx := context.Background()
-	addFn, r, _ := newTestMySQLStorage(t, ctx)
+	addFn, r, _ := newTestPostgreSQLStorage(t, ctx)
 
 	for _, test := range []struct {
 		name  string
@@ -459,13 +459,13 @@ func TestEntryBundleRoundTrip(t *testing.T) {
 	}
 }
 
-func newTestMySQLStorage(t *testing.T, ctx context.Context) (tessera.AddFn, tessera.LogReader, *Storage) {
+func newTestPostgreSQLStorage(t *testing.T, ctx context.Context) (tessera.AddFn, tessera.LogReader, *Storage) {
 	t.Helper()
 	initDatabaseSchema(ctx)
 
 	s, err := New(ctx, testDB)
 	if err != nil {
-		t.Fatalf("Failed to create mysql.Storage: %v", err)
+		t.Fatalf("Failed to create postgresql.Storage: %v", err)
 	}
 
 	a, _, r, err := tessera.NewAppender(ctx, s, tessera.NewAppendOptions().

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// mysql-migrate is a command-line tool for migrating data from a tlog-tiles
+// postgresql-migrate is a command-line tool for migrating data from a tlog-tiles
 // compliant log, into a Tessera log instance.
 package main
 
@@ -29,12 +29,12 @@ import (
 
 	"github.com/transparency-dev/tessera"
 	"github.com/transparency-dev/tessera/client"
-	"github.com/transparency-dev/tessera/storage/mysql"
+	"github.com/transparency-dev/tessera/storage/postgresql"
 	"k8s.io/klog/v2"
 )
 
 var (
-	mysqlURI          = flag.String("mysql_uri", "user:password@tcp(db:3306)/tessera", "Connection string for a MySQL database")
+	postgresqlURI          = flag.String("postgresql_uri", "user:password@tcp(db:3306)/tessera", "Connection string for a PostgreSQL database")
 	dbConnMaxLifetime = flag.Duration("db_conn_max_lifetime", 3*time.Minute, "")
 	dbMaxOpenConns    = flag.Int("db_max_open_conns", 64, "")
 	dbMaxIdleConns    = flag.Int("db_max_idle_conns", 64, "")
@@ -73,10 +73,10 @@ func main() {
 
 	db := createDatabaseOrDie(ctx)
 
-	// Initialise the Tessera MySQL storage
-	driver, err := mysql.New(ctx, db)
+	// Initialise the Tessera PostgreSQL storage
+	driver, err := postgresql.New(ctx, db)
 	if err != nil {
-		klog.Exitf("Failed to create new MySQL storage: %v", err)
+		klog.Exitf("Failed to create new PostgreSQL storage: %v", err)
 	}
 
 	opts := tessera.NewMigrationOptions()
@@ -95,7 +95,7 @@ func initDatabaseSchema(ctx context.Context) {
 	if *initSchemaPath != "" {
 		klog.Infof("Initializing database schema")
 
-		db, err := sql.Open("mysql", *mysqlURI+"?multiStatements=true")
+		db, err := sql.Open("postgresql", *postgresqlURI+"?multiStatements=true")
 		if err != nil {
 			klog.Exitf("Failed to connect to DB: %v", err)
 		}
@@ -118,7 +118,7 @@ func initDatabaseSchema(ctx context.Context) {
 }
 
 func createDatabaseOrDie(ctx context.Context) *sql.DB {
-	db, err := sql.Open("mysql", *mysqlURI)
+	db, err := sql.Open("postgresql", *postgresqlURI)
 	if err != nil {
 		klog.Exitf("Failed to connect to DB: %v", err)
 	}

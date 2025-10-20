@@ -73,7 +73,7 @@ func New(ctx context.Context, db *pgxpool.Pool) (*Storage, error) {
 	s := &Storage{
 		db: db,
 	}
-	if err := s.db.Ping(); err != nil {
+	if err := s.db.Ping(ctx); err != nil {
 		klog.Errorf("Failed to ping database: %v", err)
 		return nil, err
 	}

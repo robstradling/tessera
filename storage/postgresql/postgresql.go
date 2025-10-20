@@ -42,18 +42,18 @@ import (
 )
 
 const (
-	selectCompatibilityVersionSQL    = "SELECT `compatibilityVersion` FROM `Tessera` WHERE `id` = 0"
-	selectCheckpointByIDSQL          = "SELECT `note`, `published_at` FROM `Checkpoint` WHERE `id` = ?"
+	selectCompatibilityVersionSQL    = "SELECT compatibilityVersion FROM Tessera WHERE id = 0"
+	selectCheckpointByIDSQL          = "SELECT note, published_at FROM Checkpoint WHERE id = $1"
 	selectCheckpointByIDForUpdateSQL = selectCheckpointByIDSQL + " FOR UPDATE"
-	replaceCheckpointSQL             = "REPLACE INTO `Checkpoint` (`id`, `note`, `published_at`) VALUES (?, ?, ?)"
-	selectTreeStateByIDSQL           = "SELECT `size`, `root` FROM `TreeState` WHERE `id` = ?"
+	upsertCheckpointSQL              = "INSERT INTO Checkpoint (id, note, published_at) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET note = EXCLUDED.note, published_at = EXCLUDED.published_at"
+	selectTreeStateByIDSQL           = "SELECT size, root FROM TreeState WHERE id = $1"
 	selectTreeStateByIDForUpdateSQL  = selectTreeStateByIDSQL + " FOR UPDATE"
-	replaceTreeStateSQL              = "REPLACE INTO `TreeState` (`id`, `size`, `root`) VALUES (?, ?, ?)"
-	selectSubtreeByLevelAndIndexSQL  = "SELECT `nodes` FROM `Subtree` WHERE `level` = ? AND `index` = ?"
-	replaceSubtreeSQL                = "REPLACE INTO `Subtree` (`level`, `index`, `nodes`) VALUES (?, ?, ?)"
-	selectTiledLeavesSQL             = "SELECT `size`, `data` FROM `TiledLeaves` WHERE `tile_index` = ?"
-	streamTiledLeavesSQL             = "SELECT `tile_index`, `size`, `data` FROM `TiledLeaves` WHERE `tile_index` >= ? ORDER BY `tile_index` ASC"
-	replaceTiledLeavesSQL            = "REPLACE INTO `TiledLeaves` (`tile_index`, `size`, `data`) VALUES (?, ?, ?)"
+	upsertTreeStateSQL               = "INSERT INTO TreeState (id, size, root) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET size = EXCLUDED.size, root = EXCLUDED.root"
+	selectSubtreeByLevelAndIndexSQL  = "SELECT nodes FROM Subtree WHERE level = $1 AND index = $2"
+	upsertSubtreeSQL                 = "INSERT INTO Subtree (level, index, nodes) VALUES ($1, $2, $3) ON CONFLICT (level, index) DO UPDATE SET nodes = EXCLUDED.nodes"
+	selectTiledLeavesSQL             = "SELECT size, data FROM TiledLeaves WHERE tile_index = $1"
+	streamTiledLeavesSQL             = "SELECT tile_index, size, data FROM TiledLeaves WHERE tile_index >= $1 ORDER BY tile_index ASC"
+	upsertTiledLeavesSQL             = "INSERT INTO TiledLeaves (tile_index, size, data) VALUES ($1, $2, $3) ON CONFLICT (tile_index) DO UPDATE SET size = EXCLUDED.size, data = EXCLUDED.data"
 
 	checkpointID = 0
 	treeStateID  = 0
@@ -238,8 +238,8 @@ func (s *Storage) readTreeStateForUpdate(ctx context.Context, tx pgx.Tx) (*treeS
 
 // writeTreeState updates the TreeState table with the new tree state information.
 func (s *Storage) writeTreeState(ctx context.Context, tx pgx.Tx, size uint64, rootHash []byte) error {
-	if _, err := tx.Exec(ctx, replaceTreeStateSQL, treeStateID, size, rootHash); err != nil {
-		klog.Errorf("Failed to execute replaceTreeStateSQL: %v", err)
+	if _, err := tx.Exec(ctx, upsertTreeStateSQL, treeStateID, size, rootHash); err != nil {
+		klog.Errorf("Failed to execute upsertTreeStateSQL: %v", err)
 		return err
 	}
 
@@ -282,8 +282,8 @@ func (s *Storage) ReadTile(ctx context.Context, level, index uint64, p uint8) ([
 
 // writeTile replaces the tile nodes at the given level and index.
 func (s *Storage) writeTile(ctx context.Context, tx pgx.Tx, level, index uint64, nodes []byte) error {
-	if _, err := tx.Exec(ctx, replaceSubtreeSQL, level, index, nodes); err != nil {
-		klog.Errorf("Failed to execute replaceSubtreeSQL: %v", err)
+	if _, err := tx.Exec(ctx, upsertSubtreeSQL, level, index, nodes); err != nil {
+		klog.Errorf("Failed to execute upsertSubtreeSQL: %v", err)
 		return err
 	}
 
@@ -349,8 +349,8 @@ type dbExec interface {
 }
 
 func (s *Storage) writeEntryBundle(ctx context.Context, tx dbExec, index uint64, size uint32, entryBundle []byte) error {
-	if _, err := tx.Exec(ctx, replaceTiledLeavesSQL, index, size, entryBundle); err != nil {
-		klog.Errorf("Failed to execute replaceTiledLeavesSQL: %v", err)
+	if _, err := tx.Exec(ctx, upsertTiledLeavesSQL, index, size, entryBundle); err != nil {
+		klog.Errorf("Failed to execute upsertTiledLeavesSQL: %v", err)
 		return err
 	}
 
@@ -399,7 +399,7 @@ func (a *appender) publishCheckpoint(ctx context.Context, interval time.Duration
 		return err
 	}
 
-	if _, err := tx.Exec(ctx, replaceCheckpointSQL, checkpointID, rawCheckpoint, time.Now().UnixMilli()); err != nil {
+	if _, err := tx.Exec(ctx, upsertCheckpointSQL, checkpointID, rawCheckpoint, time.Now().UnixMilli()); err != nil {
 		return err
 	}
 

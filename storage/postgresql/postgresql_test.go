@@ -70,11 +70,7 @@ func TestMain(m *testing.M) {
 		}
 		klog.Fatalf("Failed to open PostgreSQL test db: %v", err)
 	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			klog.Warningf("Failed to close PostgreSQL database: %v", err)
-		}
-	}()
+	defer db.Close()
 	if err := db.Ping(ctx); err != nil {
 		if *isPostgreSQLTestOptional {
 			klog.Warning("PostgreSQL not available, skipping all PostgreSQL storage tests")
@@ -112,11 +108,7 @@ func initDatabaseSchema(ctx context.Context) {
 	if err != nil {
 		klog.Fatalf("Failed to connect to DB: %v", err)
 	}
-	defer func() {
-		if err := db.Close(); err != nil {
-			klog.Warningf("Failed to close db: %v", err)
-		}
-	}()
+	defer db.Close()
 
 	if _, err := db.Exec(ctx, dropTablesSQL); err != nil {
 		klog.Fatalf("Failed to drop all tables: %v", err)

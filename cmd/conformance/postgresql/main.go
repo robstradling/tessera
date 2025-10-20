@@ -246,11 +246,7 @@ func initDatabaseSchema(ctx context.Context) {
 		if err != nil {
 			klog.Exitf("Failed to connect to DB: %v", err)
 		}
-		defer func() {
-			if err := db.Close(); err != nil {
-				klog.Warningf("Failed to close db: %v", err)
-			}
-		}()
+		defer db.Close()
 
 		rawSchema, err := os.ReadFile(*initSchemaPath)
 		if err != nil {

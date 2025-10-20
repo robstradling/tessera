@@ -18,7 +18,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"flag"
 	"net/url"
@@ -27,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/transparency-dev/tessera"
 	"github.com/transparency-dev/tessera/client"
 	"github.com/transparency-dev/tessera/storage/postgresql"

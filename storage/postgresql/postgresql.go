@@ -62,11 +62,11 @@ const (
 
 // Storage is a PostgreSQL-based storage implementation for Tessera.
 type Storage struct {
-	db *sql.DB
+	db *pgxpool.Pool
 }
 
 // New creates a new instance of the PostgreSQL-based Storage.
-func New(ctx context.Context, db *sql.DB) (*Storage, error) {
+func New(ctx context.Context, db *pgxpool.Pool) (*Storage, error) {
 	s := &Storage{
 		db: db,
 	}
@@ -120,7 +120,7 @@ func (s *Storage) Appender(ctx context.Context, opts *tessera.AppendOptions) (*t
 }
 
 func (s *Storage) ensureVersion(ctx context.Context, wantVersion uint8) error {
-	row := s.db.QueryRowContext(ctx, selectCompatibilityVersionSQL)
+	row := s.db.QueryRow(ctx, selectCompatibilityVersionSQL)
 	if row.Err() != nil {
 		return row.Err()
 	}
@@ -176,7 +176,7 @@ func (s *Storage) maybeInitTree(ctx context.Context) error {
 // ReadCheckpoint returns the latest stored checkpoint.
 // If the checkpoint is not found, it returns os.ErrNotExist.
 func (s *Storage) ReadCheckpoint(ctx context.Context) ([]byte, error) {
-	row := s.db.QueryRowContext(ctx, selectCheckpointByIDSQL, checkpointID)
+	row := s.db.QueryRow(ctx, selectCheckpointByIDSQL, checkpointID)
 	if err := row.Err(); err != nil {
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func (s *Storage) ReadCheckpoint(ctx context.Context) ([]byte, error) {
 	var checkpoint []byte
 	var at int64
 	if err := row.Scan(&checkpoint, &at); err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return nil, os.ErrNotExist
 		}
 		return nil, fmt.Errorf("scan checkpoint: %v", err)
@@ -200,14 +200,14 @@ type treeState struct {
 // readTreeState returns the currently stored state information.
 // If there is no stored tree state, it returns os.ErrNotExist.
 func (s *Storage) readTreeState(ctx context.Context) (*treeState, error) {
-	row := s.db.QueryRowContext(ctx, selectTreeStateByIDSQL, treeStateID)
+	row := s.db.QueryRow(ctx, selectTreeStateByIDSQL, treeStateID)
 	if err := row.Err(); err != nil {
 		return nil, err
 	}
 
 	r := &treeState{}
 	if err := row.Scan(&r.size, &r.root); err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return nil, os.ErrNotExist
 		}
 		return nil, fmt.Errorf("scan tree state: %v", err)
@@ -217,15 +217,15 @@ func (s *Storage) readTreeState(ctx context.Context) (*treeState, error) {
 
 // readTreeStateForUpdate returns the currently stored tree state information, and locks the row for update using the provided transaction.
 // If there is no stored tree state, it returns os.ErrNotExist.
-func (s *Storage) readTreeStateForUpdate(ctx context.Context, tx *sql.Tx) (*treeState, error) {
-	row := tx.QueryRowContext(ctx, selectTreeStateByIDForUpdateSQL, treeStateID)
+func (s *Storage) readTreeStateForUpdate(ctx context.Context, tx pgx.Tx) (*treeState, error) {
+	row := tx.QueryRow(ctx, selectTreeStateByIDForUpdateSQL, treeStateID)
 	if err := row.Err(); err != nil {
 		return nil, err
 	}
 
 	r := &treeState{}
 	if err := row.Scan(&r.size, &r.root); err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return nil, os.ErrNotExist
 		}
 		return nil, fmt.Errorf("scan tree state: %v", err)
@@ -234,8 +234,8 @@ func (s *Storage) readTreeStateForUpdate(ctx context.Context, tx *sql.Tx) (*tree
 }
 
 // writeTreeState updates the TreeState table with the new tree state information.
-func (s *Storage) writeTreeState(ctx context.Context, tx *sql.Tx, size uint64, rootHash []byte) error {
-	if _, err := tx.ExecContext(ctx, replaceTreeStateSQL, treeStateID, size, rootHash); err != nil {
+func (s *Storage) writeTreeState(ctx context.Context, tx pgx.Tx, size uint64, rootHash []byte) error {
+	if _, err := tx.Exec(ctx, replaceTreeStateSQL, treeStateID, size, rootHash); err != nil {
 		klog.Errorf("Failed to execute replaceTreeStateSQL: %v", err)
 		return err
 	}
@@ -250,14 +250,14 @@ func (s *Storage) writeTreeState(ctx context.Context, tx *sql.Tx, size uint64, r
 // will return the largest tile available. This could be trimmed to return only the
 // number of entries specifically requested if this behaviour becomes problematic.
 func (s *Storage) ReadTile(ctx context.Context, level, index uint64, p uint8) ([]byte, error) {
-	row := s.db.QueryRowContext(ctx, selectSubtreeByLevelAndIndexSQL, level, index)
+	row := s.db.QueryRow(ctx, selectSubtreeByLevelAndIndexSQL, level, index)
 	if err := row.Err(); err != nil {
 		return nil, err
 	}
 
 	var tile []byte
 	if err := row.Scan(&tile); err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return nil, os.ErrNotExist
 		}
 
@@ -278,8 +278,8 @@ func (s *Storage) ReadTile(ctx context.Context, level, index uint64, p uint8) ([
 }
 
 // writeTile replaces the tile nodes at the given level and index.
-func (s *Storage) writeTile(ctx context.Context, tx *sql.Tx, level, index uint64, nodes []byte) error {
-	if _, err := tx.ExecContext(ctx, replaceSubtreeSQL, level, index, nodes); err != nil {
+func (s *Storage) writeTile(ctx context.Context, tx pgx.Tx, level, index uint64, nodes []byte) error {
+	if _, err := tx.Exec(ctx, replaceSubtreeSQL, level, index, nodes); err != nil {
 		klog.Errorf("Failed to execute replaceSubtreeSQL: %v", err)
 		return err
 	}
@@ -294,7 +294,7 @@ func (s *Storage) writeTile(ctx context.Context, tx *sql.Tx, level, index uint64
 // will return the largest tile available. This could be trimmed to return only the
 // number of entries specifically requested if this behaviour becomes problematic.
 func (s *Storage) ReadEntryBundle(ctx context.Context, index uint64, p uint8) ([]byte, error) {
-	row := s.db.QueryRowContext(ctx, selectTiledLeavesSQL, index)
+	row := s.db.QueryRow(ctx, selectTiledLeavesSQL, index)
 	if err := row.Err(); err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func (s *Storage) ReadEntryBundle(ctx context.Context, index uint64, p uint8) ([
 	var size uint32
 	var entryBundle []byte
 	if err := row.Scan(&size, &entryBundle); err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return nil, os.ErrNotExist
 		}
 		return nil, fmt.Errorf("scan entry bundle: %v", err)
@@ -339,14 +339,14 @@ func (s *Storage) NextIndex(ctx context.Context) (uint64, error) {
 	return s.IntegratedSize(ctx)
 }
 
-// dbExecContext describes something which can support the sql ExecContext function.
-// this allows us to use either sql.Tx or sql.DB.
-type dbExecContext interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
+// dbExec describes something which can support the sql Exec function.
+// this allows us to use either sql.Tx or pgxpool.Pool.
+type dbExec interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
 }
 
-func (s *Storage) writeEntryBundle(ctx context.Context, tx dbExecContext, index uint64, size uint32, entryBundle []byte) error {
-	if _, err := tx.ExecContext(ctx, replaceTiledLeavesSQL, index, size, entryBundle); err != nil {
+func (s *Storage) writeEntryBundle(ctx context.Context, tx dbExec, index uint64, size uint32, entryBundle []byte) error {
+	if _, err := tx.Exec(ctx, replaceTiledLeavesSQL, index, size, entryBundle); err != nil {
 		klog.Errorf("Failed to execute replaceTiledLeavesSQL: %v", err)
 		return err
 	}
@@ -377,7 +377,7 @@ func (a *appender) publishCheckpoint(ctx context.Context, interval time.Duration
 
 	var note string
 	var at int64
-	if err := tx.QueryRowContext(ctx, selectCheckpointByIDForUpdateSQL, checkpointID).Scan(&note, &at); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := tx.QueryRow(ctx, selectCheckpointByIDForUpdateSQL, checkpointID).Scan(&note, &at); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("scan checkpoint: %v", err)
 	}
 	if time.Since(time.UnixMilli(at)) < interval {
@@ -396,7 +396,7 @@ func (a *appender) publishCheckpoint(ctx context.Context, interval time.Duration
 		return err
 	}
 
-	if _, err := tx.ExecContext(ctx, replaceCheckpointSQL, checkpointID, rawCheckpoint, time.Now().UnixMilli()); err != nil {
+	if _, err := tx.Exec(ctx, replaceCheckpointSQL, checkpointID, rawCheckpoint, time.Now().UnixMilli()); err != nil {
 		return err
 	}
 
@@ -437,7 +437,7 @@ func (a *appender) sequenceBatch(ctx context.Context, entries []*tessera.Entry) 
 	}()
 
 	// Get tree size. Note that "SELECT ... FOR UPDATE" is used for row-level locking.
-	row := tx.QueryRowContext(ctx, selectTreeStateByIDForUpdateSQL, treeStateID)
+	row := tx.QueryRow(ctx, selectTreeStateByIDForUpdateSQL, treeStateID)
 	if err := row.Err(); err != nil {
 		return fmt.Errorf("select tree state: %v", err)
 	}
@@ -463,7 +463,7 @@ func (a *appender) sequenceBatch(ctx context.Context, entries []*tessera.Entry) 
 }
 
 // appendEntries incorporates the provided entries into the log starting at fromSeq.
-func (a *appender) appendEntries(ctx context.Context, tx *sql.Tx, fromSeq uint64, entries []*tessera.Entry) error {
+func (a *appender) appendEntries(ctx context.Context, tx pgx.Tx, fromSeq uint64, entries []*tessera.Entry) error {
 
 	sequencedEntries := make([]storage.SequencedEntry, len(entries))
 	// Assign provisional sequence numbers to entries.
@@ -481,7 +481,7 @@ func (a *appender) appendEntries(ctx context.Context, tx *sql.Tx, fromSeq uint64
 
 	// If the latest bundle is partial, we need to read the data it contains in for our newer, larger, bundle.
 	if entriesInBundle > 0 {
-		row := tx.QueryRowContext(ctx, selectTiledLeavesSQL, bundleIndex)
+		row := tx.QueryRow(ctx, selectTiledLeavesSQL, bundleIndex)
 		if err := row.Err(); err != nil {
 			return fmt.Errorf("query tiled leaves: %v", err)
 		}
@@ -546,7 +546,7 @@ func (a *appender) appendEntries(ctx context.Context, tx *sql.Tx, fromSeq uint64
 	return nil
 }
 
-func getTiles(ctx context.Context, tx *sql.Tx, tileIDs []storage.TileID, _ uint64) ([]*api.HashTile, error) {
+func getTiles(ctx context.Context, tx pgx.Tx, tileIDs []storage.TileID, _ uint64) ([]*api.HashTile, error) {
 	hashTiles := make([]*api.HashTile, len(tileIDs))
 	if len(tileIDs) == 0 {
 		return hashTiles, nil
@@ -566,7 +566,7 @@ func getTiles(ctx context.Context, tx *sql.Tx, tileIDs []storage.TileID, _ uint6
 		args = append(args, id.Level, id.Index)
 	}
 
-	rows, err := tx.QueryContext(ctx, sql.String(), args...)
+	rows, err := tx.Query(ctx, sql.String(), args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query the hash tiles with SQL (%s): %w", sql.String(), err)
 	}
@@ -597,7 +597,7 @@ func getTiles(ctx context.Context, tx *sql.Tx, tileIDs []storage.TileID, _ uint6
 }
 
 // integrate adds the provided leaf hashes to the merkle tree, starting at the provided location.
-func integrate(ctx context.Context, tx *sql.Tx, fromSeq uint64, lh [][]byte, writeTile func(context.Context, *sql.Tx, uint64, uint64, []byte) error) (uint64, []byte, error) {
+func integrate(ctx context.Context, tx pgx.Tx, fromSeq uint64, lh [][]byte, writeTile func(context.Context, pgx.Tx, uint64, uint64, []byte) error) (uint64, []byte, error) {
 	getTiles := func(ctx context.Context, tileIDs []storage.TileID, treeSize uint64) ([]*api.HashTile, error) {
 		return getTiles(ctx, tx, tileIDs, treeSize)
 	}
@@ -649,7 +649,7 @@ func (m *MigrationStorage) AwaitIntegration(ctx context.Context, sourceSize uint
 	// fromSeq keeps track of where we need to integrate from - i.e. the current local size of the integrated tree.
 	var fromSeq uint64
 	// rows provides a stream of entry bundle rows which will be processed in the loop below.
-	var rows *sql.Rows
+	var rows pgx.Rows
 
 	// The outer loop "tryAgain", will (re-) setup the streaming read of entry bundles from the DB.
 	// The inner loop will go around attempting to process each of these rows in turn. If it encounters
@@ -677,7 +677,7 @@ tryAgain:
 
 		// Set up the streaming read of entry bundles from the DB.
 		nextBundle := fromSeq / layout.EntryBundleWidth
-		rows, err = m.s.db.QueryContext(ctx, streamTiledLeavesSQL, nextBundle)
+		rows, err = m.s.db.Query(ctx, streamTiledLeavesSQL, nextBundle)
 		if err != nil {
 			klog.Warningf("Failed to start streaming entry bundles @%d: %v", nextBundle, err)
 			continue

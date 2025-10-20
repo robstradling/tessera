@@ -119,8 +119,8 @@ func main() {
 	}
 }
 
-func createDatabaseOrDie(ctx context.Context) *sql.DB {
-	db, err := sql.Open("postgresql", *postgresqlURI)
+func createDatabaseOrDie(ctx context.Context) *pgxpool.Pool {
+	db, err := pgxpool.New("postgresql", *postgresqlURI)
 	if err != nil {
 		klog.Exitf("Failed to connect to DB: %v", err)
 	}
@@ -242,7 +242,7 @@ func initDatabaseSchema(ctx context.Context) {
 	if *initSchemaPath != "" {
 		klog.Infof("Initializing database schema")
 
-		db, err := sql.Open("postgresql", *postgresqlURI+"?multiStatements=true")
+		db, err := pgxpool.New("postgresql", *postgresqlURI+"?multiStatements=true")
 		if err != nil {
 			klog.Exitf("Failed to connect to DB: %v", err)
 		}
@@ -256,7 +256,7 @@ func initDatabaseSchema(ctx context.Context) {
 		if err != nil {
 			klog.Exitf("Failed to read init schema file %q: %v", *initSchemaPath, err)
 		}
-		if _, err := db.ExecContext(ctx, string(rawSchema)); err != nil {
+		if _, err := db.Exec(ctx, string(rawSchema)); err != nil {
 			klog.Exitf("Failed to execute init database schema: %v", err)
 		}
 

@@ -45,7 +45,7 @@ var (
 	postgresqlURI            = flag.String("postgresql_uri", "root:root@tcp(localhost:3306)/test_tessera", "Connection string for a PostgreSQL database")
 	isPostgreSQLTestOptional = flag.Bool("is_postgresql_test_optional", true, "Boolean value to control whether the PostgreSQL test is optional")
 
-	testDB     *sql.DB
+	testDB     *pgxpool.Pool
 	noteSigner note.Signer
 )
 
@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 	ctx := context.Background()
 
-	db, err := sql.Open("postgresql", *postgresqlURI)
+	db, err := pgxpool.New("postgresql", *postgresqlURI)
 	if err != nil {
 		if *isPostgreSQLTestOptional {
 			klog.Warning("PostgreSQL not available, skipping all PostgreSQL storage tests")
@@ -75,7 +75,7 @@ func TestMain(m *testing.M) {
 			klog.Warningf("Failed to close PostgreSQL database: %v", err)
 		}
 	}()
-	if err := db.PingContext(ctx); err != nil {
+	if err := db.Ping(ctx); err != nil {
 		if *isPostgreSQLTestOptional {
 			klog.Warning("PostgreSQL not available, skipping all PostgreSQL storage tests")
 			return
@@ -108,7 +108,7 @@ func initDatabaseSchema(ctx context.Context) {
 		klog.Fatalf("Failed to read schema.sql: %v", err)
 	}
 
-	db, err := sql.Open("postgresql", *postgresqlURI+"?multiStatements=true")
+	db, err := pgxpool.New("postgresql", *postgresqlURI+"?multiStatements=true")
 	if err != nil {
 		klog.Fatalf("Failed to connect to DB: %v", err)
 	}
@@ -118,11 +118,11 @@ func initDatabaseSchema(ctx context.Context) {
 		}
 	}()
 
-	if _, err := db.ExecContext(ctx, dropTablesSQL); err != nil {
+	if _, err := db.Exec(ctx, dropTablesSQL); err != nil {
 		klog.Fatalf("Failed to drop all tables: %v", err)
 	}
 
-	if _, err := db.ExecContext(ctx, string(rawSchema)); err != nil {
+	if _, err := db.Exec(ctx, string(rawSchema)); err != nil {
 		klog.Fatalf("Failed to execute init database schema: %v", err)
 	}
 }

@@ -19,55 +19,55 @@
 -- running against a database with an incompatible format.
 CREATE TABLE IF NOT EXISTS Tessera (
   -- id is expected to be always 0 to maintain a maximum of a single row.
-  `id`                   TINYINT UNSIGNED NOT NULL,
+  id                   SMALLINT NOT NULL,
   -- compatibilityVersion is the version of this schema and the data within it.
-  `compatibilityVersion` BIGINT UNSIGNED NOT NULL,
-  PRIMARY KEY (`id`)
+  compatibilityVersion BIGINT NOT NULL,
+  PRIMARY KEY (id)
 );
 
-INSERT IGNORE INTO Tessera (`id`, `compatibilityVersion`) VALUES (0, 1);
+INSERT INTO Tessera (id, compatibilityVersion) VALUES (0, 1) ON CONFLICT DO NOTHING;
 
 -- "Checkpoint" table stores a single row that records the latest _published_ checkpoint for the log.
 -- This is stored separately from the TreeState in order to enable publishing of commitments to updated tree states to happen
 -- on an indepentent timeframe to the internal updating of state.
-CREATE TABLE IF NOT EXISTS `Checkpoint` (
+CREATE TABLE IF NOT EXISTS Checkpoint (
   -- id is expected to be always 0 to maintain a maximum of a single row.
-  `id`    TINYINT UNSIGNED NOT NULL,
+  id    SMALLINT NOT NULL,
   -- note is the text signed by one or more keys in the checkpoint format. See https://c2sp.org/tlog-checkpoint and https://c2sp.org/signed-note.
-  `note`  MEDIUMBLOB NOT NULL,
+  note  BYTEA NOT NULL,
   -- published_at is the millisecond UNIX timestamp of when this row was written.
-  `published_at` BIGINT NOT NULL,
-  PRIMARY KEY(`id`)
+  published_at BIGINT NOT NULL,
+  PRIMARY KEY(id)
 );
 
 -- "TreeState" table stores the current state of the integrated tree.
 -- This is not the same thing as a Checkpoint, which is a signed commitment to such a state.
-CREATE TABLE IF NOT EXISTS `TreeState` (
+CREATE TABLE IF NOT EXISTS TreeState (
   -- id is expected to be always 0 to maintain a maximum of a single row.
-  `id`    TINYINT UNSIGNED NOT NULL,
+  id    SMALLINT NOT NULL,
   -- size is the extent of the currently integrated tree.
-  `size`  BIGINT UNSIGNED NOT NULL,
+  size  BIGINT NOT NULL,
   -- root is the root hash of the tree at the size stored in `size`.
-  `root`  TINYBLOB NOT NULL,
-  PRIMARY KEY(`id`)
+  root  BYTEA NOT NULL,
+  PRIMARY KEY(id)
 );
 
 -- "Subtree" table is an internal tile consisting of hashes. There is one row for each internal tile, and this is updated until it is completed, at which point it is immutable.
-CREATE TABLE IF NOT EXISTS `Subtree` (
+CREATE TABLE IF NOT EXISTS Subtree (
   -- level is the level of the tile.
-  `level` TINYINT UNSIGNED NOT NULL,
+  level SMALLINT NOT NULL,
   -- index is the index of the tile.
-  `index` BIGINT UNSIGNED NOT NULL,
+  index BIGINT NOT NULL,
   -- nodes stores the hashes of the leaves.
-  `nodes` MEDIUMBLOB NOT NULL,
-  PRIMARY KEY(`level`, `index`)
+  nodes BYTEA NOT NULL,
+  PRIMARY KEY(level, index)
 );
 
 -- "TiledLeaves" table stores the data committed to by the leaves of the tree. Follows the same evolution as Subtree.
-CREATE TABLE IF NOT EXISTS `TiledLeaves` (
-  `tile_index` BIGINT UNSIGNED NOT NULL,
+CREATE TABLE IF NOT EXISTS TiledLeaves (
+  tile_index BIGINT NOT NULL,
   -- size is the number of entries serialized into this leaf bundle.
-  `size`       SMALLINT UNSIGNED NOT NULL,
-  `data`       LONGBLOB NOT NULL,
-  PRIMARY KEY(`tile_index`)
+  size       SMALLINT NOT NULL,
+  data       BYTEA NOT NULL,
+  PRIMARY KEY(tile_index)
 );

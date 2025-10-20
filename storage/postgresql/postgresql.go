@@ -574,7 +574,8 @@ func getTiles(ctx context.Context, tx pgx.Tx, tileIDs []storage.TileID, _ uint64
 		return nil, fmt.Errorf("failed to query the hash tiles with SQL (%s): %w", sql.String(), err)
 	}
 	defer func() {
-		if err := rows.Close(); err != nil {
+		rows.Close()
+		if err := rows.Err(); err != nil {
 			klog.Warningf("Failed to close the rows: %v", err)
 		}
 	}()
@@ -667,7 +668,10 @@ tryAgain:
 
 		// Release resources if we're going around and resetting the read.
 		if rows != nil {
-			_ = rows.Close()
+			rows.Close()
+			if err := rows.Err(); err != nil {
+				klog.Warningf("AwaitIntegration: Failed to close the rows: %v", err)
+			}
 		}
 		// Figure out where we should be integration from.
 		from, err := m.IntegratedSize(ctx)

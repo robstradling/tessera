@@ -34,7 +34,7 @@ import (
 )
 
 var (
-	postgresqlURI     = flag.String("postgresql_uri", "user:password@tcp(db:3306)/tessera", "Connection string for a PostgreSQL database")
+	postgreSQLURI     = flag.String("postgresql_uri", "postgresql:///tessera?host=localhost&user=test", "Connection string for a PostgreSQL database")
 	dbConnMaxLifetime = flag.Duration("db_conn_max_lifetime", 3*time.Minute, "")
 	dbMaxOpenConns    = flag.Int("db_max_open_conns", 64, "")
 	dbMaxIdleConns    = flag.Int("db_max_idle_conns", 64, "")
@@ -95,7 +95,7 @@ func initDatabaseSchema(ctx context.Context) {
 	if *initSchemaPath != "" {
 		klog.Infof("Initializing database schema")
 
-		db, err := pgxpool.New(ctx, *postgresqlURI)
+		db, err := pgxpool.New(ctx, *postgreSQLURI)
 		if err != nil {
 			klog.Exitf("Failed to connect to DB: %v", err)
 		}
@@ -114,7 +114,7 @@ func initDatabaseSchema(ctx context.Context) {
 }
 
 func createDatabaseOrDie(ctx context.Context) *pgxpool.Pool {
-	db, err := pgxpool.New(ctx, *postgresqlURI)
+	db, err := pgxpool.New(ctx, *postgreSQLURI)
 	if err != nil {
 		klog.Exitf("Failed to connect to DB: %v", err)
 	}

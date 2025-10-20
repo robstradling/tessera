@@ -42,7 +42,7 @@ import (
 )
 
 var (
-	postgresqlURI            = flag.String("postgresql_uri", "root:root@tcp(localhost:3306)/test_tessera", "Connection string for a PostgreSQL database")
+	postgreSQLURI            = flag.String("postgresql_uri", "postgresql:///test_tessera?host=localhost&user=test", "Connection string for a PostgreSQL database")
 	isPostgreSQLTestOptional = flag.Bool("is_postgresql_test_optional", true, "Boolean value to control whether the PostgreSQL test is optional")
 
 	testDB     *pgxpool.Pool
@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	flag.Parse()
 	ctx := context.Background()
 
-	db, err := pgxpool.New(ctx, *postgresqlURI)
+	db, err := pgxpool.New(ctx, *postgreSQLURI)
 	if err != nil {
 		if *isPostgreSQLTestOptional {
 			klog.Warning("PostgreSQL not available, skipping all PostgreSQL storage tests")
@@ -104,7 +104,7 @@ func initDatabaseSchema(ctx context.Context) {
 		klog.Fatalf("Failed to read schema.sql: %v", err)
 	}
 
-	db, err := pgxpool.New(ctx, *postgresqlURI)
+	db, err := pgxpool.New(ctx, *postgreSQLURI)
 	if err != nil {
 		klog.Fatalf("Failed to connect to DB: %v", err)
 	}

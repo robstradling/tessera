@@ -151,7 +151,7 @@ func (s *Storage) maybeInitTree(ctx context.Context) error {
 		return fmt.Errorf("being tx init tree state: %v", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+		if err := tx.Rollback(ctx); err != nil && err != sql.ErrTxDone {
 			klog.Errorf("Failed to rollback in write initial tree state: %v", err)
 		}
 	}()
@@ -169,7 +169,7 @@ func (s *Storage) maybeInitTree(ctx context.Context) error {
 		}
 		// Only need to commit if we've actually initialised the tree state, otherwise we'll
 		// rely on the defer'd rollback to tidy up.
-		if err := tx.Commit(); err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			return fmt.Errorf("commit init tree state: %v", err)
 		}
 	}
@@ -373,7 +373,7 @@ func (a *appender) publishCheckpoint(ctx context.Context, interval time.Duration
 		return fmt.Errorf("begin tx: %v", err)
 	}
 	defer func() {
-		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+		if err := tx.Rollback(ctx); err != nil && err != sql.ErrTxDone {
 			klog.Warningf("publishCheckpoint rollback failed: %v", err)
 		}
 	}()
@@ -405,7 +405,7 @@ func (a *appender) publishCheckpoint(ctx context.Context, interval time.Duration
 
 	klog.V(2).Infof("Published latest checkpoint: %d, %x", treeState.size, treeState.root)
 
-	return tx.Commit()
+	return tx.Commit(ctx)
 }
 
 // Add is the entrypoint for adding entries to a sequencing log.
@@ -434,7 +434,7 @@ func (a *appender) sequenceBatch(ctx context.Context, entries []*tessera.Entry) 
 	}
 	// Defer a rollback in case anything fails.
 	defer func() {
-		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+		if err := tx.Rollback(ctx); err != nil && err != sql.ErrTxDone {
 			klog.Errorf("Failed to rollback in sequenceBatch: %v", err)
 		}
 	}()
@@ -455,7 +455,7 @@ func (a *appender) sequenceBatch(ctx context.Context, entries []*tessera.Entry) 
 	}
 
 	// Commit the transaction.
-	err = tx.Commit()
+	err = tx.Commit(ctx)
 
 	select {
 	case a.cpUpdated <- struct{}{}:
@@ -743,7 +743,7 @@ func (m *MigrationStorage) integrateBatch(ctx context.Context, fromSeq uint64, l
 	}
 	defer func() {
 		if tx != nil {
-			if err := tx.Rollback(); err != nil {
+			if err := tx.Rollback(ctx); err != nil {
 				klog.Warningf("integrateBatch: Rollback: %v", err)
 			}
 		}
@@ -757,7 +757,7 @@ func (m *MigrationStorage) integrateBatch(ctx context.Context, fromSeq uint64, l
 		return 0, nil, fmt.Errorf("writeTreeState: %v", err)
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return 0, nil, fmt.Errorf("commit: %v", err)
 	}
 	tx = nil
